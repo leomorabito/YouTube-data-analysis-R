@@ -1,0 +1,118 @@
+---
+title: "Example R code"
+author: "Leo Morabito"
+date: "2025-06-16"
+output: html_document
+---
+
+
+```{r include=FALSE}
+# libraries
+library(tidyverse)
+library(openxlsx)
+library(readxl)
+library(ggplot2)
+library(lubridate)
+library(stats)
+library(stargazer)
+library(xtable)
+```
+
+# A - First Gender Analysis
+
+In this first analysis we will test the first research question about the gender differences in the content creator market.
+
+
+```{r}
+rm(list=ls())
+
+df <- read_excel("DataGender1.xlsx")
+
+# Filter out "Non-human" channels (those that are not directly the owner of the channel)
+df_human <- df %>% filter(classification!="Non-human")
+
+# Convert DayChannel to Date format and extract year
+df_human$DayChannel <- as.Date(df_human$DayChannel, format = "%Y-%m-%d")
+df_human$Year <- year(df_human$DayChannel)
+
+```
+
+## **1 - Basic Descriptive Statistics**
+
+Calculate basic statistics to understand the distribution of subscribers and view counts among different gender classifications.
+
+```{r}
+
+# Normalize Subs and Views by Video Count
+df_human <- df_human %>%
+  mutate(
+    Subscribers_Per_Video = Subscribers / VideoCount,
+    Views_Per_Video = ViewCounts / VideoCount)
+
+# drop channels with 0 videos
+df_human1 <- df_human %>%
+  filter(VideoCount>0)
+
+topic_gender_distribution <- df_human1 %>%
+  group_by(topic, classification) %>%
+  summarise(Subscribers_Per_Video = n(), .groups = 'drop')
+
+basic_stats <- df_human1 %>%
+  group_by(classification) %>%
+  summarise(
+    N_channels = n(),
+    N_Video = sum(VideoCount, na.rm = T),
+    Mean_Video = mean(VideoCount, na.rm=T),
+    Mean_Subscribers = mean(Subscribers, na.rm = TRUE),
+    Mean_ViewCounts = mean(ViewCounts, na.rm = TRUE),
+    Mean_Subscribers_Video = mean(Subscribers_Per_Video, na.rm = TRUE),
+    Mean_ViewCounts_Video = mean(Views_Per_Video, na.rm = TRUE)
+  )
+
+# convert to latex format
+latex_table <- xtable(basic_stats)
+
+# Print the LaTeX code
+print(latex_table, include.rownames = FALSE, hline.after = c(-1,0, nrow(basic_stats)), 
+      sanitize.text.function = function(x) {x})
+
+```
+
+
+#### Testing the differences
+
+```{r}
+df_gender <- df_human1 %>% filter(classification != "Shared")
+
+# T-test for video production
+t_test_nvideos <- t.test(df_gender$VideoCount ~ df_gender$classification , na.rm = TRUE)
+
+# T-test for Subscribers
+t_test_subscribers <- t.test(df_gender$Subscribers ~ df_gender$classification , na.rm = TRUE)
+
+# T-test for View Counts
+t_test_viewcounts <- t.test(df_gender$ViewCounts ~ df_gender$classification, na.rm = TRUE)
+
+# Output the results
+t_test_nvideos
+t_test_subscribers
+t_test_viewcounts
+
+```
+
+
+```{r}
+# Histogram of Subscribers for each group
+ggplot(df_human1, aes(x = log(Subscribers), fill = classification)) +
+  geom_histogram(bins = 30, alpha = 0.6) +
+  facet_wrap(~classification) +
+  labs(title = "Distribution of Subscribers by Group", x = "log(Subscribers)", y = "Frequency") +
+  theme_minimal()
+
+# Boxplot for subscribers
+ggplot(df_human1, aes(x = classification, y = log(Subscribers), fill = classification)) +
+  geom_boxplot() +
+  labs(title = "Box Plot of Subscribers by Group", x = "Group", y = "Subscribers") +
+  theme_minimal()
+
+```
